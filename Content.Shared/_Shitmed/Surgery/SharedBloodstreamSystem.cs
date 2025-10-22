@@ -48,10 +48,16 @@ public abstract partial class SharedBloodstreamSystem
         while (bleedsQuery.MoveNext(out var ent, out var bleeds))
         {
             var canBleed = CanWoundBleed(ent, bleeds) && bleeds.BleedingAmount > 0;
-            if (canBleed != bleeds.IsBleeding)
-                Dirty(ent, bleeds);
+            // Goobstation - START 🐢 - Woundmed bleeding issues
+            var wasBleeding = bleeds.IsBleeding;
 
-            bleeds.IsBleeding = canBleed;
+            // Update IsBleeding if the state changed
+            if (canBleed != wasBleeding)
+            {
+                bleeds.IsBleeding = canBleed;
+                Dirty(ent, bleeds);
+            }
+            // GoobStation - END
 
             if (!bleeds.IsBleeding)
                 continue;

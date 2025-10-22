@@ -169,7 +169,15 @@ public abstract partial class SharedBloodstreamSystem : EntitySystem
 
             var missingBlood = bloodstream.BloodMaxVolume - bloodstream.BloodSolution.Value.Comp.Solution.Volume;
 
-            bloodstream.BleedAmount = (float) total / 4;
+            // Goobstation - Start Fix Bleeding alert
+            // Calculate the new bleed amount and update it through TryModifyBleedAmount
+            var newBleedAmount = (float)total / 4;
+            if (!MathHelper.CloseTo(bloodstream.BleedAmount, newBleedAmount))
+            {
+                var diff = newBleedAmount - bloodstream.BleedAmount;
+                TryModifyBleedAmount(uid, diff);
+            }
+            // Goobstation - end
             if (!_consciousness.SetConsciousnessModifier(
                     uid,
                     nerveSys.Value,
@@ -487,6 +495,22 @@ public abstract partial class SharedBloodstreamSystem : EntitySystem
     }
 
     /// <summary>
+    /// Updates the bleeding alert based on the current bleed amount
+    /// </summary>
+    private void UpdateBleedingAlert(Entity<BloodstreamComponent> ent)
+    {
+        if (ent.Comp.BleedAmount <= 0)
+        {
+            _alertsSystem.ClearAlert(ent, ent.Comp.BleedingAlert);
+        }
+        else
+        {
+            var severity = (short)Math.Clamp(Math.Round(ent.Comp.BleedAmount, MidpointRounding.ToZero), 1, 10);
+            _alertsSystem.ShowAlert(ent, ent.Comp.BleedingAlert, severity);
+        }
+    }
+
+    /// <summary>
     /// Tries to make an entity bleed more or less.
     /// </summary>
     public bool TryModifyBleedAmount(Entity<BloodstreamComponent?> ent, float amount)
@@ -494,18 +518,15 @@ public abstract partial class SharedBloodstreamSystem : EntitySystem
         if (!Resolve(ent, ref ent.Comp, logMissing: false))
             return false;
 
-        ent.Comp.BleedAmount += amount;
-        ent.Comp.BleedAmount = Math.Clamp(ent.Comp.BleedAmount, 0, ent.Comp.MaxBleedAmount);
+        var oldBleedAmount = ent.Comp.BleedAmount;
+        ent.Comp.BleedAmount = Math.Clamp(ent.Comp.BleedAmount + amount, 0, ent.Comp.MaxBleedAmount);
+
+        // Only update if the amount actually changed
+        if (MathHelper.CloseTo(ent.Comp.BleedAmount, oldBleedAmount))
+            return true;
 
         DirtyField(ent, ent.Comp, nameof(BloodstreamComponent.BleedAmount));
-
-        if (ent.Comp.BleedAmount == 0)
-            _alertsSystem.ClearAlert(ent, ent.Comp.BleedingAlert);
-        else
-        {
-            var severity = (short)Math.Clamp(Math.Round(ent.Comp.BleedAmount, MidpointRounding.ToZero), 0, 10);
-            _alertsSystem.ShowAlert(ent, ent.Comp.BleedingAlert, severity);
-        }
+        UpdateBleedingAlert((ent, ent.Comp));
 
         return true;
     }
